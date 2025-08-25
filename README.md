@@ -65,6 +65,3 @@ sudo systemctl daemon-reload
 ```
 
 ---
-
-## License
-MIT

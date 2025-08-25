@@ -1,4 +1,3 @@
-#!/bin/bash
 msg_info() {
     echo -e "\033[1;36m[INFO]\033[0m $1"
 }
@@ -83,3 +82,47 @@ echo -e "\n---------------------------------------------------"
 echo -e "Open WebUI should now be running."
 echo -e "Access it by navigating to http://$IP_ADDRESS:3000 in your web browser."
 echo -e "---------------------------------------------------\n"
+
+# --- Netplan Configuration Section ---
+msg_info "Checking for netplan configuration..."
+NETPLAN_DIR="/etc/netplan"
+if [ -d "$NETPLAN_DIR" ]; then
+    NETPLAN_FILE=$(ls $NETPLAN_DIR/*.yaml 2>/dev/null | head -n 1)
+    if [ -n "$NETPLAN_FILE" ]; then
+        echo -e "\nNetplan file detected: $NETPLAN_FILE"
+        read -p "Do you want to configure a static IP address? (y/n): " CONFIGURE_NETPLAN
+        if [[ "$CONFIGURE_NETPLAN" =~ ^[Yy]$ ]]; then
+            read -p "Enter the desired static IP address (e.g., 192.168.1.100/24): " STATIC_IP
+            read -p "Enter the gateway (e.g., 192.168.1.1): " GATEWAY
+            read -p "Enter DNS servers (comma separated, e.g., 8.8.8.8,8.8.4.4): " DNS_SERVERS
+            # Find the interface name
+            INTERFACE=$(ls /sys/class/net | grep -v lo | head -n 1)
+            if [ -z "$INTERFACE" ]; then
+                msg_error "Could not detect a network interface."
+            fi
+            msg_info "Backing up original netplan file..."
+            cp "$NETPLAN_FILE" "$NETPLAN_FILE.bak" || msg_error "Failed to backup netplan file."
+            cat > "$NETPLAN_FILE" <<EOF
+network:
+  version: 2
+  renderer: networkd
+  ethernets:
+    $INTERFACE:
+      dhcp4: no
+      addresses: [$STATIC_IP]
+      gateway4: $GATEWAY
+      nameservers:
+        addresses: [${DNS_SERVERS//,/ }]
+EOF
+            msg_info "Applying netplan configuration..."
+            netplan apply || msg_error "Failed to apply netplan configuration."
+            msg_ok "Netplan static IP configuration applied."
+        else
+            msg_info "Skipping netplan static IP configuration."
+        fi
+    else
+        msg_info "No netplan YAML file found in $NETPLAN_DIR. Skipping netplan configuration."
+    fi
+else
+    msg_info "Netplan directory not found. Skipping netplan configuration."
+fi
